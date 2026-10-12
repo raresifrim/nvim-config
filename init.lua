@@ -31,7 +31,7 @@ vim.pack.add({
 -- Colorscheme
 ---------------------------------------------------------------------------
 require('catppuccin').setup({
-  flavour = 'mocha', -- latte, frappe, macchiato, mocha
+  flavour = 'frappe', -- latte, frappe, macchiato, mocha
   transparent_background = false,
 })
 vim.cmd.colorscheme('catppuccin')
@@ -82,13 +82,28 @@ vim.api.nvim_create_autocmd('VimEnter', {
 })
 
 ---------------------------------------------------------------------------
--- C / C++: don't indent inside namespaces or extern "C" blocks
+-- C / C++ indentation
 ---------------------------------------------------------------------------
+-- Wrapper around Neovim's built-in C indenter (cindent):
+-- a line directly below `template <...>` gets the same indent as the
+-- template line itself; every other line is handled by cindent as usual.
+function _G.CppIndent()
+  local prev = vim.fn.prevnonblank(vim.v.lnum - 1)
+  if prev > 0 and vim.fn.getline(prev):match('^%s*template%s*<.*>%s*$') then
+    return vim.fn.indent(prev)
+  end
+  return vim.fn.cindent(vim.v.lnum)
+end
+
 vim.api.nvim_create_autocmd('FileType', {
-  group = vim.api.nvim_create_augroup('CppNamespaceIndent', { clear = true }),
+  group = vim.api.nvim_create_augroup('CppIndent', { clear = true }),
   pattern = { 'c', 'cpp' },
   callback = function()
-    vim.opt_local.cinoptions:append('N-s,E-s')
+    -- N-s: no indent inside namespaces
+    -- E-s: no indent inside extern "C" blocks
+    -- g0 : public:/private:/protected: aligned with the class keyword
+    vim.opt_local.cinoptions:append('N-s,E-s,g0')
+    vim.opt_local.indentexpr = 'v:lua.CppIndent()'
   end,
 })
 
@@ -99,7 +114,7 @@ vim.api.nvim_create_autocmd('BufWritePre', {
   group = vim.api.nvim_create_augroup('AutoIndentOnSave', { clear = true }),
   callback = function(args)
     -- Only run for these filetypes (edit the list to taste)
-    local allowed = { lua = true, c = true, cpp = true, verilog = true, systemverilog = true }
+    local allowed = { lua = true, c = true, cpp = true, verilog = true, systemverilog = true, rust = true }
     if not allowed[vim.bo[args.buf].filetype] then
       return
     end
